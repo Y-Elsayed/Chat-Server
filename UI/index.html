@@ -1,104 +1,184 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Chat App</title>
   <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
   <div class="chat-container">
     <div class="chat-box" id="chatBox">
       <!-- Messages will be dynamically added here -->
     </div>
     <div class="input-box" id="inputBox">
-      <textarea id="messageInput" placeholder="Type your message..." oninput="updateSendButtonStyle()" onkeydown="handleKeyDown(event)" onfocus="handleFocus()" onblur="handleBlur()"></textarea>
+      <textarea id="messageInput" placeholder="Type your message..." oninput="updateSendButtonStyle()"
+        onkeydown="handleKeyDown(event)" onfocus="handleFocus()" onblur="handleBlur()"></textarea>
       <button id="sendButton" onclick="sendMessage()">Send</button>
     </div>
   </div>
 
+  <!-- Loading container for displaying loading message and spinner -->
+  <div class="loading-container">
+    <p>Loading data, please wait...</p>
+    <div class="loading-spinner"></div>
+  </div>
+
+
   <script>
-    function sendMessage() {
-      var messageInput = document.getElementById("messageInput");
-      var messageText = messageInput.value.trim();
-      if (messageText === "") return;
+    document.addEventListener("DOMContentLoaded", function () {
 
-      // Replace newline characters with HTML line breaks
-      messageText = messageText.replace(/\n/g, "<br>");
+      var loadingContainer = document.getElementById("loadingContainer");
+      loadingContainer.style.display = "block"; // Show loading container when the page loads
+      // Establish WebSocket connection
+      var ws = new WebSocket("ws://127.0.0.1:8080");
 
-      var chatBox = document.getElementById("chatBox");
-      var messageDiv = document.createElement("div");
-      messageDiv.classList.add("message", "outgoing");
-      messageDiv.innerHTML = '<div class="message-content"><div class="message-sender">You</div><div class="message-text">' + messageText + '</div></div>';
-      chatBox.appendChild(messageDiv);
+      // Event handler for when the WebSocket connection is opened
+      ws.onopen = function (event) {
+        console.log("WebSocket connection opened.");
+      };
 
-      // Scroll to the latest message
-      chatBox.scrollTop = chatBox.scrollHeight;
+      // Event handler for errors
+      ws.onerror = function (error) {
+        console.error("WebSocket connection error:", error);
+      };
 
-      // Clear input after sending message
-      messageInput.value = "";
-      resizeTextarea(); // Reset the textarea size
-      updateSendButtonStyle(); // Update send button style
-      messageInput.focus();
-    }
+      // Event handler for when the WebSocket connection is closed
+      ws.onclose = function (event) {
+        console.log("WebSocket connection closed.");
+      };
 
-    function receiveMessage(message, sender) {
-      var chatBox = document.getElementById("chatBox");
-      var messageDiv = document.createElement("div");
-      messageDiv.classList.add("message", "incoming");
-      messageDiv.innerHTML = '<div class="message-content"><div class="message-sender">' + sender + '</div><div class="message-text">' + message + '</div></div>';
-      chatBox.appendChild(messageDiv);
+      ws.onmessage = function (event) {
+        var messageData = JSON.parse(event.data);
+        var message = messageData.message;
+        var sender = messageData.username;
+        var timestamp = messageData.timestamp; // Assuming the timestamp is included in the message data
+        receiveMessage(message, sender, timestamp);
+        loadingContainer.style.display = "none"; // Hide loading container once messages are received
+      };
 
-      // Scroll to the latest message
-      chatBox.scrollTop = chatBox.scrollHeight;
-    }
 
-    function resizeTextarea() {
-      var textarea = document.getElementById("messageInput");
-      textarea.style.height = ""; // Reset the height to auto
-      textarea.style.height = Math.min(textarea.scrollHeight, 150) + "px"; // Limit the height to 150px
-    }
+      function sendMessage() {
+        var messageInput = document.getElementById("messageInput");
+        var messageText = messageInput.value.trim();
+        if (messageText === "") return;
+        var usernameText = localStorage.getItem("username");
+        var timeStamp = new Date().toISOString(); // Get current timestamp
 
-    function handleKeyDown(event) {
-      if (event.keyCode === 13 && !event.shiftKey) { // Enter key without Shift
-        event.preventDefault(); // Prevent default newline behavior
-        sendMessage();
-      } else if (event.keyCode === 13 && event.shiftKey) { // Shift + Enter
+        var messageDataObj = {
+          username: usernameText,
+          message: messageText,
+          time: timeStamp,
+        };
+        // Replace newline characters with HTML line breaks
+        messageText = messageText.replace(/\n/g, "<br>");
+
+        var chatBox = document.getElementById("chatBox");
+        var messageDiv = document.createElement("div");
+        messageDiv.classList.add("message", "outgoing");
+        messageDiv.innerHTML = '<div class="message-content"><div class="message-sender">You</div><div class="message-text">' + messageText + '</div><div class="message-timestamp">' + formatTimestamp(timestamp) + '</div></div>';
+        chatBox.appendChild(messageDiv);
+
+        // Scroll to the latest message
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        // Clear input after sending message
+        messageInput.value = "";
+        resizeTextarea(); // Reset the textarea size
+        updateSendButtonStyle(); // Update send button style
+        messageInput.focus();
+
+        // Send message over WebSocket
+        ws.send(JSON.stringify(messageDataObj));
+      }
+
+      function formatTimestamp(timestamp) {
+        const now = new Date();
+        const messageTime = new Date(timestamp);
+        const diff = now - messageTime;
+
+        // Define time units in milliseconds
+        const minute = 60 * 1000;
+        const hour = 60 * minute;
+        const day = 24 * hour;
+
+        if (diff < minute) {
+          return "Just now";
+        } else if (diff < hour) {
+          const minutesAgo = Math.floor(diff / minute);
+          return `${minutesAgo} minute${minutesAgo > 1 ? 's' : ''} ago`;
+        } else if (diff < day) {
+          const hoursAgo = Math.floor(diff / hour);
+          return `${hoursAgo} hour${hoursAgo > 1 ? 's' : ''} ago`;
+        } else {
+          // Return absolute timestamp in a custom format
+          const options = { hour: 'numeric', minute: 'numeric', hour12: true };
+          return messageTime.toLocaleString('en-US', options);
+        }
+      }
+
+      function receiveMessage(message, sender, timestamp) {
+        var chatBox = document.getElementById("chatBox");
+        var messageDiv = document.createElement("div");
+        messageDiv.classList.add("message", "incoming");
+        messageDiv.innerHTML = '<div class="message-content"><div class="message-sender">' + sender + '</div><div class="message-text">' + message + '</div><div class="message-timestamp">' + formatTimestamp(timestamp) + '</div></div>';
+        chatBox.appendChild(messageDiv);
+
+        // Scroll to the latest message
+        chatBox.scrollTop = chatBox.scrollHeight;
+      }
+
+      function resizeTextarea() {
         var textarea = document.getElementById("messageInput");
-        var cursorPosition = textarea.selectionStart;
-        var textBeforeCursor = textarea.value.substring(0, cursorPosition);
-        var textAfterCursor = textarea.value.substring(cursorPosition);
-        textarea.value = textBeforeCursor + "\n" + textAfterCursor;
-        textarea.selectionStart = cursorPosition + 1;
-        textarea.selectionEnd = cursorPosition + 1;
-        event.preventDefault(); // Prevent default newline behavior
+        textarea.style.height = ""; // Reset the height to auto
+        textarea.style.height = Math.min(textarea.scrollHeight, 150) + "px"; // Limit the height to 150px
       }
-    }
 
-    function updateSendButtonStyle() {
-      var messageInput = document.getElementById("messageInput");
-      var sendButton = document.getElementById("sendButton");
-      if (messageInput.value.trim() !== "") {
-        sendButton.classList.add("active"); // Add active class
-      } else {
-        sendButton.classList.remove("active"); // Remove active class
+      function handleKeyDown(event) {
+        if (event.keyCode === 13 && !event.shiftKey) { // Enter key without Shift
+          event.preventDefault(); // Prevent default newline behavior
+          sendMessage();
+        } else if (event.keyCode === 13 && event.shiftKey) { // Shift + Enter
+          var textarea = document.getElementById("messageInput");
+          var cursorPosition = textarea.selectionStart;
+          var textBeforeCursor = textarea.value.substring(0, cursorPosition);
+          var textAfterCursor = textarea.value.substring(cursorPosition);
+          textarea.value = textBeforeCursor + "\n" + textAfterCursor;
+          textarea.selectionStart = cursorPosition + 1;
+          textarea.selectionEnd = cursorPosition + 1;
+          event.preventDefault(); // Prevent default newline behavior
+        }
       }
-    }
 
-    function handleFocus() {
-      var messageInput = document.getElementById("messageInput");
-      messageInput.style.borderColor = "#ccc"; // Light grey border color when focused
-    }
+      function updateSendButtonStyle() {
+        var messageInput = document.getElementById("messageInput");
+        var sendButton = document.getElementById("sendButton");
+        if (messageInput.value.trim() !== "") {
+          sendButton.classList.add("active"); // Add active class
+        } else {
+          sendButton.classList.remove("active"); // Remove active class
+        }
+      }
 
-    function handleBlur() {
-      var messageInput = document.getElementById("messageInput");
-      messageInput.style.borderColor = ""; // Reset border color when blurred
-    }
+      function handleFocus() {
+        var messageInput = document.getElementById("messageInput");
+        messageInput.style.borderColor = "#ccc"; // Light grey border color when focused
+      }
 
-    // Simulate receiving messages after 1 second
-    setTimeout(function() {
-      receiveMessage("Hello! How can I help you?", "Support");
-    }, 1000);
+      function handleBlur() {
+        var messageInput = document.getElementById("messageInput");
+        messageInput.style.borderColor = ""; // Reset border color when blurred
+      }
+
+      // Simulate receiving messages after 1 second
+      setTimeout(function () {
+        receiveMessage("Hello! How can I help you?", "Support","12:00");
+      }, 1000);
+    });
   </script>
+
 </body>
+
 </html>

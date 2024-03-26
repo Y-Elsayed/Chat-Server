@@ -10,13 +10,15 @@
 #include <errno.h>   // Add for errno
 #include <stdbool.h> // Add for boolean type
 #include <pthread.h>
+#include "database.h"
 
 #define PORT 8080
 #define MAX_CLIENTS 10
 client_sockets[MAX_CLIENTS];
-
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 int main()
 {
+    pthread_mutex_init(&mutex, NULL);
     /*
         - server_fd: This variable represents the file descriptor for the server socket. It is used to accept incoming connections and manage communication with clients.
         - client_sockets[MAX_CLIENTS]: This array is used to store file descriptors for client sockets. Each element of the array corresponds to a connected client. When a new client connects, its socket descriptor is stored in an available slot in this array.
@@ -112,6 +114,7 @@ int main()
         FD_SET(server_fd, &readfds);
         max_sd = server_fd;
 
+        // Set client sockets array to associated cs values.
         for (int i = 0; i < MAX_CLIENTS; i++)
         {
             int sd = client_sockets[i];
@@ -126,7 +129,6 @@ int main()
         }
 
         /*When a client is trying to join the server*/
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Interested in reading so we passed the readfds and the write,error and timeout are nulls, since timeout is null it will wait infinitely till it catches a read request
         activity = select(max_sd + 1, &readfds, NULL, NULL, NULL);
         if ((activity < 0) && (errno != EINTR))
@@ -144,16 +146,6 @@ int main()
 
             printf("New connection, socket fd is %d, IP is: %s, port : %d\n", new_socket, inet_ntoa(address.sin_addr), ntohs(address.sin_port));
 
-            pthread_t thread_id;  // Create a new thread for the client
-            if (pthread_create(&thread_id, NULL, handle_client, (void *)&new_socket) != 0)//should Implement handle_client now.
-            {
-                perror("pthread_create");
-                // Handle thread creation error
-            }
-            pthread_detach(thread_id);
-
-            // Add new socket to array of client sockets
-            /*Might add it in the handle_client function, but should make sure to use mutexes for synchronization*/
             for (int i = 0; i < MAX_CLIENTS; i++)
             {
                 if (client_sockets[i] == 0)
@@ -162,77 +154,139 @@ int main()
                     break;
                 }
             }
-        }
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-        /* Newly added code for chat history*/
-
-        // Handle incoming messages
-        for (int i = 0; i < MAX_CLIENTS; i++)
-        {
-            int sd = client_sockets[i];
-
-            if (FD_ISSET(sd, &readfds)) // check if socket is in the sockets set
+            // Add new socket to array of client sockets
+            pthread_t thread_id; // Create a new thread for the client
+            if (pthread_create(&thread_id, NULL, handle_client, (void *)&new_socket) != 0)
             {
-                // Check socket sd for data, if there is write it to server_buffer.
-                if (read(sd, server_buffer, 1024) == 0) // Where message is sent.
-                {
-                    // lock buffer here
-                    // Client disconnected here.
-                    getpeername(sd, (struct sockaddr *)&address, &addrlen);
-                    printf("Client disconnected, ip %s, port %d\n", inet_ntoa(address.sin_addr), ntohs(address.sin_port));
-                    close(sd);
-                    client_sockets[i] = 0;
-                }
-                // else if there is a write request (write this condition)
-                else
-                {
-                    // Broadcast message to other clients (forcfully), without need to
-                    for (int j = 0; j < MAX_CLIENTS; j++)
-                    {
-                        int dest_sd = client_sockets[j];
-                        if (dest_sd != 0 && dest_sd != sd)
-                        {
-                            send(dest_sd, server_buffer, strlen(server_buffer), 0);
-                        }
-                    }
-                    /*Insert the msg in the db*/
-                }
+                perror("pthread_create");
+                // Handle thread creation error
             }
+            pthread_detach(thread_id);
+            /*Might add it in the handle_client function, but should make sure to use mutexes for synchronization*/
         }
     }
 
     return 0;
 }
 
-// Modify the handle_client function to handle chat history requests
-void *handle_client(void *clientInfo)
+//Attempt at multithreading
+void *handle_client(void *cs)
 {
-    client_info *client = (client_info *)clientInfo; // Point to given client info.
-    char buffer[MAX_MSG_SIZE];                       // Memory buffer to store incoming messages.
-    ssize_t bytes_received;                          // Counter for the bytes received
-    // Similar to send, as recv returns 0 (connection closed) keep looping, and it should return zero when it finished sending.
-    while ((bytes_received = recv(client->socket, buffer, MAX_MSG_SIZE - 1, 0)) > 0)
+    int client_socket = *((int *)cs);
+    char client_buffer[1024];
+    ssize_t bytes_received;
+
+    struct sockaddr_in address;
+    socklen_t addrlen = sizeof(address);
+
+    // Receive username (Obligatory) with a timeout
+    char username_buffer[256];
+    memset(username, 0, sizeof(username)); // Clear username buffer
+
+    fd_set readfds;
+    struct timeval timeout;
+    timeout.tv_sec = 10; // Set timeout to 30 seconds
+    timeout.tv_usec = 0;
+
+    FD_ZERO(&readfds);
+    FD_SET(client_socket, &readfds);
+
+    int activity = select(client_socket + 1, &readfds, NULL, NULL, &timeout);
+    if (activity == -1)
     {
-        buffer[bytes_received] = '\0'; // Null terminate the received message (To close string)
-        if (strcmp(buffer, "GET_HISTORY") == 0)
+        perror("select");
+        close(client_socket);
+        pthread_exit(NULL);
+    }
+    else if (activity == 0)
+    {
+        // Timeout occurred
+        printf("Timeout occurred while waiting for username.\n");
+        close(client_socket);
+        pthread_exit(NULL);
+    }
+    else
+    {
+        // Wait to read the username:
+        if ((bytes_received = recv(client_socket, username_buffer, sizeof(username) - 1, 0)) <= 0)
         {
-            // Client requested chat history
-            send_chat_history(client->socket);
+            // Failed to receive username or client disconnected
+            printf("Failed to receive username or client disconnected.\n");
+            close(client_socket);
+            pthread_exit(NULL);
         }
         else
-        { // Else should mean they are trying sending a message, we need to send that message.
+        {
+            // Null-terminate the received data to make it a valid C string
+            username_buffer[bytes_received] = '\0';
 
-            // Process other messages (e.g., save to database, broadcast to other clients)
-            /*Handle locks*/
-            printf("Received message from %s: %s\n", inet_ntoa(client->address.sin_addr), buffer);
-            // Echo back to the client
-            send(client->socket, buffer, strlen(buffer), 0);
+            cJSON *root_username = cJSON_Parse(username_buffer);
+            if (root_username == NULL)
+            {
+                // Handle parsing error
+                printf("Failed to receive username or client disconnected.\n");
+                close(client_socket);
+                pthread_exit(NULL);
+            }
+            cJSON *username_item = cJSON_GetObjectItem(root_username, "username");
+            const char *username = username_item->valuestring;
+            printf("Username received: %s\n", username); // might send this as a message to the front-end
+            cJSON_Delete(root_username);
+            // pthread_mutex_lock(&mutex);
+            // insert_username(username);
+            // pthread_mutex_unlock(&mutex);
+            /*if (!insert_username(username))
+            {
+                send a message to the UI in welcome.html telling the client to use another username and goto "again".
+            }*/
+            // Send chat history to the client upon connection
+            send_chat_history(client_socket);
+            // Handle communication with the client
+            while ((bytes_received = recv(client_socket, client_buffer, sizeof(client_buffer), 0)) > 0)
+            {
+                client_buffer[bytes_received] = '\0';
+                cJSON *root_msg = cJSON_Parse(client_buffer);
+
+                // Extract fields from the JSON object
+                cJSON *timestamp_item = cJSON_GetObjectItem(root_msg, "time");
+                const char *timestamp = (timestamp_item != NULL) ? timestamp_item->valuestring : "";
+                cJSON *message_item = cJSON_GetObjectItem(root_msg, "message");
+                const char *message = (message_item != NULL) ? message_item->valuestring : "";
+
+                // Broadcast only the message to other clients
+                for (int j = 0; j < MAX_CLIENTS; j++)
+                {
+                    int dest_sd = client_sockets[j];
+                    if (dest_sd != 0 && dest_sd != client_socket)
+                    {
+                        // send(dest_sd, client_buffer, bytes_received, 0);
+                        send(dest_sd, message, strlen(message), 0);
+                    }
+                }
+                // Message sent to all other clients, now it is safe to insert it into database.
+                pthread_mutex_lock(&mutex);
+                insert_message(timestamp, username, client_buffer);
+                pthread_mutex_unlock(&mutex);
+                // Free cJSON object
+                cJSON_Delete(root_msg);
+            }
+            // Client disconnected
+            // Clean up resources and close the socket
+            getpeername(client_socket, (struct sockaddr *)&address, &addrlen);
+            printf("Client disconnected, ip %s, port %d\n", inet_ntoa(address.sin_addr), ntohs(address.sin_port));
+            close(client_socket);
+            // Remove the client socket from the array
+            for (int i = 0; i < MAX_CLIENTS; i++)
+            {
+                if (client_sockets[i] == client_socket)
+                {
+                    pthread_mutex_lock(&mutex);
+                    client_sockets[i] = 0;
+                    pthread_mutex_unlock(&mutex);
+                    break;
+                }
+            }
+            pthread_exit(NULL);
         }
     }
-    // We reach here after they
-    printf("Client disconnected: %s\n", inet_ntoa(client->address.sin_addr));
-    close(client->socket);
-    free(client);
-    pthread_exit(NULL);
 }

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome Page</title>
+  <link rel="stylesheet" href="welcome_styles.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Welcome!</h1>
+    <div class="input-container">
+      <label for="username">Enter your username:</label>
+      <input type="text" id="username" placeholder="Username">
+      <button id="submitBtn">Submit</button>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      var submitBtn = document.getElementById("submitBtn");
+      submitBtn.addEventListener("click", function() {
+        var usernameInput = document.getElementById("username").value.trim();
+        if (usernameInput === "" || usernameInput.length > 200) {
+          alert("Please enter a valid username (1-200 characters)");
+        } else {
+          // Establish WebSocket connection
+          var ws = new WebSocket("ws://127.0.0.1:8080"); // Replace with your server address
+          localStorage.setItem("username", usernameInput);//save the username to the local storage
+          
+          // Event handler for when the WebSocket connection is opened
+          ws.onopen = function(event) {
+            // Send username as JSON to server
+            var usernameObj = { username: usernameInput };
+            ws.send(JSON.stringify(usernameObj));
+          };
+
+          // Event handler for errors
+          ws.onerror = function(error) {
+            alert("WebSocket connection error.");
+          };
+
+          // Event handler for when the WebSocket connection is closed
+          ws.onclose = function(event) {
+            alert("WebSocket connection closed.");
+          };
+
+          // Redirect to index.html or perform any other action upon successful submission
+          window.location.href = "index.html";
+        }
+      });
+    });
+  </script>
+</body>
+</html>
