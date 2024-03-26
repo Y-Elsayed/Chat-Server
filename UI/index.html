@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat App</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="chat-container">
+    <div class="chat-box" id="chatBox">
+      <!-- Messages will be dynamically added here -->
+    </div>
+    <div class="input-box" id="inputBox">
+      <textarea id="messageInput" placeholder="Type your message..." oninput="updateSendButtonStyle()" onkeydown="handleKeyDown(event)" onfocus="handleFocus()" onblur="handleBlur()"></textarea>
+      <button id="sendButton" onclick="sendMessage()">Send</button>
+    </div>
+  </div>
+
+  <script>
+    function sendMessage() {
+      var messageInput = document.getElementById("messageInput");
+      var messageText = messageInput.value.trim();
+      if (messageText === "") return;
+
+      // Replace newline characters with HTML line breaks
+      messageText = messageText.replace(/\n/g, "<br>");
+
+      var chatBox = document.getElementById("chatBox");
+      var messageDiv = document.createElement("div");
+      messageDiv.classList.add("message", "outgoing");
+      messageDiv.innerHTML = '<div class="message-content"><div class="message-sender">You</div><div class="message-text">' + messageText + '</div></div>';
+      chatBox.appendChild(messageDiv);
+
+      // Scroll to the latest message
+      chatBox.scrollTop = chatBox.scrollHeight;
+
+      // Clear input after sending message
+      messageInput.value = "";
+      resizeTextarea(); // Reset the textarea size
+      updateSendButtonStyle(); // Update send button style
+      messageInput.focus();
+    }
+
+    function receiveMessage(message, sender) {
+      var chatBox = document.getElementById("chatBox");
+      var messageDiv = document.createElement("div");
+      messageDiv.classList.add("message", "incoming");
+      messageDiv.innerHTML = '<div class="message-content"><div class="message-sender">' + sender + '</div><div class="message-text">' + message + '</div></div>';
+      chatBox.appendChild(messageDiv);
+
+      // Scroll to the latest message
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function resizeTextarea() {
+      var textarea = document.getElementById("messageInput");
+      textarea.style.height = ""; // Reset the height to auto
+      textarea.style.height = Math.min(textarea.scrollHeight, 150) + "px"; // Limit the height to 150px
+    }
+
+    function handleKeyDown(event) {
+      if (event.keyCode === 13 && !event.shiftKey) { // Enter key without Shift
+        event.preventDefault(); // Prevent default newline behavior
+        sendMessage();
+      } else if (event.keyCode === 13 && event.shiftKey) { // Shift + Enter
+        var textarea = document.getElementById("messageInput");
+        var cursorPosition = textarea.selectionStart;
+        var textBeforeCursor = textarea.value.substring(0, cursorPosition);
+        var textAfterCursor = textarea.value.substring(cursorPosition);
+        textarea.value = textBeforeCursor + "\n" + textAfterCursor;
+        textarea.selectionStart = cursorPosition + 1;
+        textarea.selectionEnd = cursorPosition + 1;
+        event.preventDefault(); // Prevent default newline behavior
+      }
+    }
+
+    function updateSendButtonStyle() {
+      var messageInput = document.getElementById("messageInput");
+      var sendButton = document.getElementById("sendButton");
+      if (messageInput.value.trim() !== "") {
+        sendButton.classList.add("active"); // Add active class
+      } else {
+        sendButton.classList.remove("active"); // Remove active class
+      }
+    }
+
+    function handleFocus() {
+      var messageInput = document.getElementById("messageInput");
+      messageInput.style.borderColor = "#ccc"; // Light grey border color when focused
+    }
+
+    function handleBlur() {
+      var messageInput = document.getElementById("messageInput");
+      messageInput.style.borderColor = ""; // Reset border color when blurred
+    }
+
+    // Simulate receiving messages after 1 second
+    setTimeout(function() {
+      receiveMessage("Hello! How can I help you?", "Support");
+    }, 1000);
+  </script>
+</body>
+</html>

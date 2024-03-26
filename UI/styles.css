@@ -1,0 +1,107 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background-image: url('Background.jpg'); /* Set background image */
+    background-size: cover; /* Cover the entire viewport */
+    background-position: center; /* Center the background image */
+    background-repeat: no-repeat; /* Do not repeat the background image */
+    opacity: 0.8; /* Reduce opacity of the background */
+  }
+  
+  .chat-container {
+    max-width: 400px;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background-color: rgba(120, 170, 255, 1); /* Fully opaque background color */
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  
+  
+  
+  .chat-box {
+    flex: 1;
+    padding: 10px;
+    overflow-y: auto;
+  }
+  
+  .message {
+    margin-bottom: 10px;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .message-content {
+    background-color: #f9f9f9; /* Off white background */
+    padding: 8px;
+    border-radius: 10px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Shadow */
+    display: inline-block; /* Allow container to shrink or expand based on content */
+    max-width: 70%; /* Maximum width for message content */
+    word-wrap: break-word; /* Wrap long words */
+  }
+  
+  .message-sender {
+    font-weight: bold;
+    color: #333; /* Dark grey color */
+  }
+  
+  .message-text {
+    margin-top: 5px;
+  }
+  
+  .message.incoming .message-content {
+    align-self: flex-start;
+  }
+  
+  .message.outgoing .message-content {
+    align-self: flex-end;
+    background-color: #4CAF50; /* Green background for outgoing messages */
+    color: white; /* White text color for outgoing messages */
+  }
+  
+  .input-box {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between; /* Distribute items evenly */
+    padding: 10px;
+    background-color: #f9f9f9;
+    border-top: 1px solid #ccc; /* Border between chat and input box */
+  }
+  
+  .input-box textarea {
+    flex: 1;
+    padding: 8px;
+    border: none;
+    border-radius: 5px;
+    max-width: 70%; /* Maximum width for input field */
+    word-wrap: break-word; /* Wrap long words */
+    resize: none; /* Prevent manual resizing */
+    overflow-y: auto; /* Enable vertical scrolling */
+  }
+  
+  .input-box button {
+    padding: 10px 20px; /* Larger padding */
+    border: none;
+    border-radius: 5px;
+    background-color: #6FCF97; /* Light green color */
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.3s ease; /* Smooth transition */
+  }
+  
+  .input-box button:hover {
+    background-color: #acf8cd; /* Darker green color on hover */
+  }
+  
+  .input-box button.active {
+    background-color: #1dc90d; /* Dark green color when active */
+}
+  
