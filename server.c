@@ -1,21 +1,25 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <sys/select.h>
-#include <errno.h>   // Add for errno
-#include <stdbool.h> // Add for boolean type
-#include <pthread.h>
-#include "database.h"
+#include "database.h" //Database functions
 
 #define PORT 8080
 #define MAX_CLIENTS 10
-client_sockets[MAX_CLIENTS];
+int client_sockets[MAX_CLIENTS];
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+void printIPAddress(int port) {
+    char hostname[1024];
+    hostname[1023] = '\0';
+    gethostname(hostname, 1023);
+    struct hostent *host_info;
+    host_info = gethostbyname(hostname);
+    char *ip_address = inet_ntoa(*(struct in_addr *)host_info->h_addr_list[0]);
+    printf("Server running at IP: %s, Port: %d\n", ip_address, port);
+}
+
+//Attempt at multithreading
+void *handle_client(void *cs);
+
+int try_bind_alternative_addresses(int server_fd, struct sockaddr_in *address);
+
 int main()
 {
     pthread_mutex_init(&mutex, NULL);
@@ -68,7 +72,6 @@ int main()
 
     /*This line sets the IP address of the socket to INADDR_ANY. When binding a socket to this address,
     the socket can receive packets destined for any of the IP addresses assigned to the host. It allows the socket to accept connections on any available network interface.*/
-    address.sin_addr.s_addr = INADDR_ANY;
 
     /*This line sets the port number of the socket to PORT. Before assigning the port number,
     the htons() function is used to convert the port number from host byte order to network byte order.
@@ -82,9 +85,8 @@ int main()
     If the binding operation fails, an error message is printed, and the program exits with a failure status.
     This is crucial for error handling and ensuring that the server can properly initialize and start listening for incoming connections.
     */
-    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0)
-    {
-        perror("bind failed");
+    if (try_bind_alternative_addresses(server_fd, &address) != 0) {
+        printf("Failed to bind to any alternative IP addresses. Exiting.\n");
         exit(EXIT_FAILURE);
     }
 
@@ -168,8 +170,6 @@ int main()
 
     return 0;
 }
-
-//Attempt at multithreading
 void *handle_client(void *cs)
 {
     int client_socket = *((int *)cs);
@@ -181,7 +181,7 @@ void *handle_client(void *cs)
 
     // Receive username (Obligatory) with a timeout
     char username_buffer[256];
-    memset(username, 0, sizeof(username)); // Clear username buffer
+    memset(username_buffer, 0, sizeof(username_buffer)); // Clear username buffer
 
     fd_set readfds;
     struct timeval timeout;
@@ -208,7 +208,7 @@ void *handle_client(void *cs)
     else
     {
         // Wait to read the username:
-        if ((bytes_received = recv(client_socket, username_buffer, sizeof(username) - 1, 0)) <= 0)
+        if ((bytes_received = recv(client_socket, username_buffer, sizeof(username_buffer) - 1, 0)) <= 0)
         {
             // Failed to receive username or client disconnected
             printf("Failed to receive username or client disconnected.\n");
@@ -289,4 +289,49 @@ void *handle_client(void *cs)
             pthread_exit(NULL);
         }
     }
+}
+int try_bind_alternative_addresses(int server_fd, struct sockaddr_in *address) {
+    struct hostent *host_info;
+    struct sockaddr_in *s;
+    char hostname[256];
+    char ip[256];
+    int num_addresses = 0;
+    int i;
+
+    // Get the hostname
+    if (gethostname(hostname, sizeof(hostname)) != 0) {
+        perror("gethostname");
+        return -1;
+    }
+
+    // Get host information
+    if ((host_info = gethostbyname(hostname)) == NULL) {
+        perror("gethostbyname");
+        return -1;
+    }
+
+    // Iterate through the list of addresses and attempt to bind
+    for (i = 0; host_info->h_addr_list[i] != NULL; i++) {
+        s = (struct sockaddr_in *)host_info->h_addr_list[i];
+        const char *ip_address = inet_ntop(AF_INET, &(s->sin_addr), ip, sizeof(ip));
+        if (ip_address == NULL) {
+            perror("inet_ntop");
+            return -1;
+        }
+
+        printf("Trying to bind to IP address: %s\n", ip);
+
+        // Set the IP address
+        address->sin_addr.s_addr = inet_addr(ip);
+
+        // Attempt to bind
+        if (bind(server_fd, (struct sockaddr *)address, sizeof(*address)) == 0) {
+            printf("Successfully bound to IP address: %s\n", ip);
+            return 0; // Successful bind
+        }
+
+        perror("Bind Failed");
+    }
+
+    return -1; // All attempts failed
 }
