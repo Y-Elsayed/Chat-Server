@@ -16,12 +16,9 @@ void init_database() {
 }
 void create_table() {
     //SQL command to be run, written as raw string.
-    const char *sql = "CREATE TABLE IF NOT EXISTS Messages (" // Don't create the table if it does exist.
-                      "Timestamp TIMESTAMP WITH TIME ZONE," //Inserted with special PSQL value CURRENT_TIMESTAMP.
-                      "Username TEXT PRIMARY KEY,"
-                      "Content TEXT);
-                       CREATE TABLE IF NOT EXISTS Usernames (
-                       Username TEXT PRIMARY KEY);";
+    // Don't create the table if it does exist.
+    //Inserted with special PSQL value CURRENT_TIMESTAMP.
+    const char *sql = "CREATE TABLE IF NOT EXISTS Messages (Timestamp TIMESTAMP WITH TIME ZONE, Username TEXT PRIMARY KEY,Content TEXT); CREATE TABLE IF NOT EXISTS Usernames (Username TEXT PRIMARY KEY);";
 
     PGresult *res = PQexec(db_conn, sql); // Excute the SQL query using the previously established connection.
     //Error Handling if the execution failed.
@@ -38,7 +35,7 @@ void insert_message(const char * time,const char *username, const char *message)
     const char *sql = "INSERT INTO Messages (Timestamp, Username, Content) VALUES ( $1, $2 , $3);";
 
     // Set up the parameter values for the query
-    const char *paramValues[2] = {time,username, message};
+    const char *paramValues[3] = {time,username, message};
 
     // Execute the SQL query with parameters
     PGresult *res = PQexecParams(db_conn, sql, 3, NULL, paramValues, NULL, NULL, 0);
@@ -148,7 +145,7 @@ void send_chat_history(int client_socket) {
         cJSON_AddStringToObject(message_obj, "message", PQgetvalue(res, i, 2));
 
         // Convert the cJSON object to a JSON string
-        const char *json_str = cJSON_PrintUnformatted(message_obj);
+        char *json_str = cJSON_PrintUnformatted(message_obj);
 
         // Send the JSON string to the client
         send_all(client_socket, json_str, strlen(json_str), 0);
