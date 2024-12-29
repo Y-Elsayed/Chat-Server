@@ -1,6 +1,6 @@
 # Chat-Server
 
-This repository contains a **multithreaded group chat server** application implemented in C as part of an Operating Systems project. The server allows multiple clients to communicate simultaneously, with messages stored in a PostgreSQL database. The application demonstrates concepts of socket programming, multithreading, and database management.
+This project is a **multithreaded group chat server** application implemented in C as part of an Operating Systems project. The server allows multiple clients to communicate simultaneously, with messages stored in a PostgreSQL database. The application demonstrates concepts of socket programming, multithreading, and database management.
 
 ## Features
 
